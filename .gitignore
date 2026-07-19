@@ -1,0 +1,67 @@
+# -----------------------------------------------
+# Node.js / NestJS
+# -----------------------------------------------
+node_modules/
+dist/
+*.tsbuildinfo
+
+# NestJS CLI
+.npm
+
+# -----------------------------------------------
+# Environment Variables (contains secrets!)
+# -----------------------------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------------------------
+# Docker
+# -----------------------------------------------
+# Docker images are built, not committed
+*.tar
+
+# -----------------------------------------------
+# Kubernetes Secrets (real credentials)
+# -----------------------------------------------
+# imagepullsecret.yaml may contain base64-encoded GHCR credentials
+# if manually filled in. Uncomment the line below if you fill it in:
+# kubernetes/imagepullsecret.yaml
+
+# -----------------------------------------------
+# IDE / Editor
+# -----------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# -----------------------------------------------
+# Operating System
+# -----------------------------------------------
+.DS_Store          # macOS
+Thumbs.db          # Windows
+desktop.ini        # Windows
+
+# -----------------------------------------------
+# Testing / Coverage
+# -----------------------------------------------
+coverage/
+.nyc_output/
+
+# -----------------------------------------------
+# Logs
+# -----------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -----------------------------------------------
+# Temporary files
+# -----------------------------------------------
+*.tmp
+*.temp
+.cache/

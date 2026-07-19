@@ -1,0 +1,98 @@
+# ============================================================================
+# KUBERNETES RESOURCE: Ingress
+# ============================================================================
+#
+# CONCEPT: What is an Ingress?
+#
+# An Ingress manages EXTERNAL HTTP/HTTPS access to Services inside the cluster.
+# It provides:
+#   - Path-based routing (e.g., /api → backend, / → frontend)
+#   - Host-based routing (e.g., api.example.com → one service, web.example.com → another)
+#   - TLS/SSL termination (HTTPS)
+#   - Name-based virtual hosting
+#
+# WITHOUT Ingress:
+#   - Each service needs its own NodePort or LoadBalancer
+#   - Managing URLs, SSL certs, and routing is painful
+#
+# WITH Ingress:
+#   - One entry point for all HTTP traffic
+#   - Centralized SSL, routing rules, rate limiting
+#
+# Ingress DOES NOT work on its own — it needs an Ingress Controller:
+#   - nginx-ingress (most popular, we'll use this)
+#   - traefik
+#   - HAProxy
+#   - AWS ALB Ingress Controller
+#   - etc.
+#
+# ON DOCKER DESKTOP:
+# Docker Desktop doesn't come with an Ingress Controller by default.
+# You need to install one (we'll use nginx-ingress):
+#   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+#
+# After installing, you can access the app at http://localhost
+# (Port 80 is mapped to the ingress controller).
+# ============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: task-manager-ingress
+  namespace: task-manager
+  labels:
+    app: task-manager
+  annotations:
+    # nginx-specific configuration (only needed with nginx-ingress controller)
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Limit request body size (prevent abuse)
+    nginx.ingress.kubernetes.io/proxy-body-size: '1m'
+spec:
+  # ---- INGRESS CLASS ----
+  # Which Ingress Controller should handle this?
+  # "nginx" is the class name for nginx-ingress controller.
+  ingressClassName: nginx
+
+  # ---- RULES ----
+  # Define how to route incoming traffic
+  rules:
+    # If you have a domain, replace with your actual domain:
+    # - host: api.taskmanager.local
+    - http:
+        paths:
+          # Path-based routing: all traffic going to / is sent to our API
+          - path: /
+            pathType: Prefix # "Prefix" matches /, /health, /tasks, /tasks/1, etc.
+            backend:
+              service:
+                name: task-manager-service # This must match the ClusterIP Service name
+                port:
+                  number: 3000
+
+# ---------------------------------------------------------------------------
+# EXTENDING FOR MULTIPLE SERVICES (Future):
+#
+# When you add a frontend later:
+#
+# rules:
+#   - host: api.taskmanager.local
+#     http:
+#       paths:
+#         - path: /
+#           pathType: Prefix
+#           backend:
+#             service:
+#               name: task-manager-service
+#               port:
+#                 number: 3000
+#   - host: web.taskmanager.local
+#     http:
+#       paths:
+#         - path: /
+#           pathType: Prefix
+#           backend:
+#             service:
+#               name: frontend-service
+#               port:
+#                 number: 80
+# ---------------------------------------------------------------------------

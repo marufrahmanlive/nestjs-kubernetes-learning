@@ -1,0 +1,42 @@
+# ============================================================================
+# KUBERNETES RESOURCE: ConfigMap
+# ============================================================================
+#
+# CONCEPT: What is a ConfigMap?
+#
+# A ConfigMap stores non-sensitive configuration data as key-value pairs.
+# It decouples configuration from your container image, so you can change
+# settings without rebuilding the Docker image.
+#
+# WHY IT EXISTS:
+# - Change configuration without rebuilding images
+# - Use different config for different environments (dev/staging/prod)
+# - Keep your containers portable across environments
+#
+# BEST PRACTICE:
+# - ConfigMaps = non-sensitive data (app settings, URLs, feature flags)
+# - Secrets = sensitive data (passwords, API keys, tokens)
+# - Never hardcode configuration in your Docker image
+#
+# We're using @nestjs/config, which reads from process.env.
+# We'll inject these ConfigMap values as environment variables
+# in the Deployment (see deployment.yaml).
+# ============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: task-manager-config
+  namespace: task-manager
+  labels:
+    app: task-manager
+data:
+  # These are key-value pairs that become environment variables
+  NODE_ENV: 'production'
+  PORT: '3000'
+  APP_NAME: 'Task Manager API'
+
+  # NOTE: The actual values here are intentionally simple since our
+  # current app only needs PORT. As we add MongoDB, Redis, etc.,
+  # we'll add their connection strings here (non-sensitive parts)
+  # and put passwords in Secrets.

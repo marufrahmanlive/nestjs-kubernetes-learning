@@ -1,0 +1,108 @@
+# ============================================================================
+# KUBERNETES RESOURCE: Service
+# ============================================================================
+#
+# CONCEPT: What is a Service?
+#
+# Pods are EPHEMERAL — they get new IP addresses when restarted. You can't
+# rely on Pod IPs directly. A Service provides a STABLE IP address and DNS
+# name that doesn't change, even when Pods come and go.
+#
+# A Service acts as a LOAD BALANCER across all Pods matching its selector.
+#
+# Service Types (from inside → outside):
+#
+# 1. ClusterIP (default)
+#    - Internal-only IP, accessible ONLY within the cluster
+#    - Used for internal service-to-service communication
+#    - Example: Frontend → Backend API (internal)
+#    - Use this when you DON'T need external access
+#
+# 2. NodePort
+#    - Opens a port on EVERY node in the cluster (30000-32767)
+#    - Accessible externally via <NodeIP>:<NodePort>
+#    - Used for development/testing or simple setups
+#    - NOT recommended for production (security, port management)
+#
+# 3. LoadBalancer
+#    - Creates an external load balancer (cloud provider specific)
+#    - Automatically provisions AWS ELB, GCP LB, Azure LB, etc.
+#    - On Docker Desktop: works like NodePort (no real LB)
+#
+# IN THIS FILE:
+# We define TWO Service definitions:
+#   1. ClusterIP Service (internal communication)
+#   2. NodePort Service (development access from your machine)
+#
+# Later, we'll add Ingress for better external access routing.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# SERVICE 1: ClusterIP (Internal)
+# ---------------------------------------------------------------------------
+# This is the preferred service for pod-to-pod communication.
+# Other services in the cluster reach this via DNS: task-manager-service.task-manager.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-manager-service # DNS name within cluster
+  namespace: task-manager
+  labels:
+    app: task-manager
+spec:
+  # ClusterIP = internal only. This is the DEFAULT and RECOMMENDED type.
+  type: ClusterIP
+
+  # SELECTOR: Finds Pods with these labels.
+  # Traffic is load-balanced across ALL matching Pods.
+  # This MUST match the labels in deployment.yaml's pod template.
+  selector:
+    app: task-manager
+
+  # PORTS: Maps external ports (Service) to internal ports (Container/Pod)
+  ports:
+    - name: http
+      port: 3000 # Port exposed by the Service (other pods connect here)
+      targetPort: 3000 # Port the container listens on
+      protocol: TCP
+
+  # ---- SESSION AFFINITY ----
+  # By default, each request goes to a random Pod (Round Robin).
+  # Setting sessionAffinity: ClientIP sends all requests from the same
+  # client IP to the same Pod. Useful for stateful apps.
+  # We leave it as None (default) since our API is stateless.
+  # sessionAffinity: None
+
+
+# ---------------------------------------------------------------------------
+# SERVICE 2: NodePort (External Dev Access)
+# ---------------------------------------------------------------------------
+# This exposes the app on a port on EVERY cluster node.
+# On Docker Desktop, you can access it at http://localhost:<nodePort>
+#
+# USE CASE: Quick local development access without setting up Ingress.
+#
+# NOTE: In production, you would use Ingress instead (more secure,
+# supports path-based routing, TLS termination, etc.)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-manager-nodeport
+  namespace: task-manager
+  labels:
+    app: task-manager
+spec:
+  # NodePort = opens a port on all nodes
+  type: NodePort
+
+  selector:
+    app: task-manager
+
+  ports:
+    - name: http
+      port: 3000 # Service port (other pods use this)
+      targetPort: 3000 # Container port
+      # nodePort: 30300 # Optionally specify a port. If omitted, K8s picks one (30000-32767).
+      protocol: TCP

@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+README.md
+.npm
+.eslintrc.*
+.prettierrc
+*.md
+coverage
+test
+.vscode
+.idea

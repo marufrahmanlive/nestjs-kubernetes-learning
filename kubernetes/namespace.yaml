@@ -1,0 +1,29 @@
+# ============================================================================
+# KUBERNETES RESOURCE: Namespace
+# ============================================================================
+#
+# CONCEPT: What is a Namespace?
+#
+# A Namespace is a logical isolation boundary within a Kubernetes cluster.
+# Think of it as a "virtual cluster" inside your physical cluster. It lets you
+# organize resources, control access, and set resource quotas independently.
+#
+# WHY IT EXISTS:
+# - Isolation: Team A's pods won't interfere with Team B's
+# - Organization: Group related resources together
+# - Access Control: Apply RBAC policies per namespace
+# - Resource Quotas: Limit CPU/memory usage per namespace
+# - Cleanup: Delete the namespace and all resources inside are removed
+#
+# In our project, we create a dedicated namespace "task-manager" to keep
+# all our resources together. This is a production best practice — never
+# deploy apps to the "default" namespace.
+# ============================================================================
+
+apiVersion: v1 # Kubernetes API version
+kind: Namespace # Type of resource we're creating
+metadata:
+  name: task-manager # The unique name of our namespace
+  labels:
+    app: task-manager # Labels help organize and select resources
+    env: development # You can add environment labels for multi-env setups

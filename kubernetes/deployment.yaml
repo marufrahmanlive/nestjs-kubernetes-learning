@@ -1,0 +1,230 @@
+# ============================================================================
+# KUBERNETES RESOURCES: Deployment, ReplicaSet, and Pod
+# ============================================================================
+#
+# CONCEPT: What is a Pod?
+#
+# A Pod is the SMALLEST deployable unit in Kubernetes. It represents a single
+# instance of a running process. A Pod can contain one or more containers that
+# share the same network namespace, IP address, and storage volumes.
+#
+# Key characteristics:
+# - Each Pod gets its own IP address within the cluster
+# - Containers in the same Pod can communicate via localhost
+# - Pods are EPHEMERAL — they can die and be replaced at any time
+# - NEVER create standalone Pods in production. Use Deployments!
+#
+# CONCEPT: What is a Deployment?
+#
+# A Deployment is a DECLARATIVE way to manage Pods. You declare your desired
+# state (e.g., "I want 3 replicas of my app"), and Kubernetes continuously
+# works to maintain that state. If a Pod dies, the Deployment automatically
+# creates a replacement.
+#
+# A Deployment manages a ReplicaSet, which manages Pods:
+#   Deployment → ReplicaSet → Pod
+#
+# WHY DEPLOYMENTS EXIST:
+# - Self-healing: Automatically replaces failed Pods
+# - Scaling: Increase/decrease replicas easily
+# - Rolling Updates: Update Pods with zero downtime
+# - Rollbacks: Revert to a previous version if something goes wrong
+#
+# CONCEPT: What are Labels & Selectors?
+#
+# Labels are key-value pairs attached to resources (Pods, Services, etc.).
+# Selectors are used to find resources with specific labels.
+#
+# This is how Kubernetes components find each other:
+# - A Service uses a selector to find which Pods to send traffic to
+# - A Deployment uses a selector to find which Pods it manages
+#
+# BEST PRACTICE: Labels should follow this convention:
+#   app.kubernetes.io/name: application name
+#   app.kubernetes.io/component: tier (frontend, backend, database)
+#   app.kubernetes.io/part-of: larger application name
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-manager-deployment
+  namespace: task-manager
+  labels:
+    app: task-manager
+    app.kubernetes.io/name: task-manager
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: task-manager-system
+spec:
+  # ---- REPLICAS ----
+  # Number of identical Pod copies to maintain at all times.
+  # Start with 2 for basic high availability. Scale up when needed.
+  replicas: 2
+
+  # ---- SELECTOR ----
+  # Tells the Deployment which Pods it manages.
+  # MUST match the Pod template labels below.
+  # If these don't match, the Deployment can't track its Pods.
+  selector:
+    matchLabels:
+      app: task-manager
+
+  # ---- STRATEGY (Rolling Update) ----
+  # Defines HOW to replace old Pods with new ones.
+  #
+  # RollingUpdate: Gradually replace Pods (zero downtime)
+  #   - maxSurge: How many EXTRA Pods can be created during update
+  #   - maxUnavailable: How many Pods can be UNAVAILABLE during update
+  #
+  # Example with replicas=2, maxSurge=1, maxUnavailable=1:
+  #   1. Create 1 new Pod (total: 3)
+  #   2. Wait for new Pod to be Ready
+  #   3. Remove 1 old Pod (total: 2)
+  #   4. Create another new Pod (total: 3)
+  #   5. Wait for it to be Ready
+  #   6. Remove last old Pod (total: 2)
+  #
+  # Recreate: Delete all old Pods first, then create new ones (DOWNTIME!)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+
+  # ---- REVISION HISTORY LIMIT ----
+  # How many old ReplicaSets to keep for rollbacks.
+  # Default is 10. We keep 3 to save resources.
+  revisionHistoryLimit: 3
+
+  # ---- POD TEMPLATE ----
+  # This defines the "blueprint" for every Pod this Deployment creates.
+  template:
+    metadata:
+      # These labels go on every Pod.
+      # They MUST match the selector above.
+      labels:
+        app: task-manager
+        version: v1
+    spec:
+      # ---- IMAGE PULL SECRETS ----
+      # CREDENTIALS to authenticate with private container registries.
+      #
+      # Why needed: GitHub Container Registry (GHCR) is private.
+      # Kubernetes must authenticate to pull images from it.
+      #
+      # How it works:
+      # 1. We create a Secret containing Docker registry credentials
+      # 2. We reference it here as imagePullSecrets
+      # 3. When creating Pods, kubelet uses these credentials to pull images
+      #
+      # COMMON MISTAKE: Forgetting imagePullSecrets → ImagePullBackOff error!
+      #
+      # We'll create this secret in Topic 3.
+      imagePullSecrets:
+        - name: ghcr-secret
+
+      # ---- CONTAINERS ----
+      containers:
+        - name: task-manager
+          # IMAGE from GitHub Container Registry (private repo)
+          # Format: ghcr.io/OWNER/REPO:tag
+          # We'll push our image here in Topic 2.
+          image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+
+          # ---- IMAGE PULL POLICY ----
+          # Controls when Kubernetes pulls the image.
+          # - Always: Pull every time (useful during development with :latest)
+          # - IfNotPresent: Pull only if not cached locally
+          # - Never: Only use local images (useful for local dev with minikube)
+          #
+          # For production: Use specific version tags (e.g., :v1.2.3) with IfNotPresent
+          # For development: Use :latest with Always to get latest changes
+          imagePullPolicy: Always
+
+          # ---- PORTS ----
+          # This is documentation — it does NOT make the port accessible.
+          # Services use this to know which ports the container listens on.
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+
+          # ---- ENVIRONMENT VARIABLES ----
+          # Injected from ConfigMap and Secret defined earlier.
+          #
+          # ConfigMapRef: Loads ALL keys from a ConfigMap as env vars.
+          # SecretRef: Loads ALL keys from a Secret as env vars.
+          # You can also load individual keys with configMapKeyRef/secretKeyRef.
+          envFrom:
+            - configMapRef:
+                name: task-manager-config
+            - secretRef:
+                name: task-manager-secret
+
+          # ---- RESOURCE REQUESTS & LIMITS ----
+          # Requests: Minimum resources guaranteed to the container.
+          #           The scheduler uses this to decide WHERE to place the Pod.
+          # Limits: Maximum resources the container can use.
+          #         If exceeded, CPU is throttled, memory leads to OOMKill.
+          #
+          # WHY THEY EXIST:
+          # - Without limits, one buggy container can consume all node resources
+          # - Without requests, scheduler can't make good placement decisions
+          # - They protect the cluster from noisy neighbors
+          #
+          # BEST PRACTICE: Always set both! Start conservative, monitor, adjust.
+          resources:
+            requests:
+              memory: '128Mi' # Mi = Mebibytes (1024^2 bytes)
+              cpu: '100m' # 100m = 0.1 CPU core = 100 millicores
+            limits:
+              memory: '256Mi'
+              cpu: '500m'
+
+          # ---- LIVENESS PROBE ----
+          # Answers: "Is the container still ALIVE?"
+          # If it fails, Kubernetes RESTARTS the container.
+          #
+          # USE CASES:
+          # - Application is deadlocked but process is still running
+          # - Memory leak caused the app to become unresponsive
+          #
+          # COMMON MISTAKES:
+          # - Making the liveness probe too aggressive (restart loops)
+          # - Not having a separate health endpoint (GET /health)
+          # - Making the probe depend on external services (cascading failures)
+          #
+          # initialDelaySeconds: Wait this long before first probe.
+          #   Gives the app time to start up.
+          # periodSeconds: How often to check.
+          # timeoutSeconds: How long to wait for a response.
+          # failureThreshold: How many consecutive failures before restart.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # ---- READINESS PROBE ----
+          # Answers: "Is the container ready to receive TRAFFIC?"
+          # If it fails, the Pod is removed from Service endpoints.
+          # The container keeps running, but receives NO traffic.
+          #
+          # USE CASES:
+          # - Application needs time to warm up (load cache, connect to DB)
+          # - Application is overloaded and needs to shed traffic temporarily
+          #
+          # DIFFERENCE FROM LIVENESS:
+          # - Liveness: Kill it, it's broken → RESTART
+          # - Readiness: Don't send it traffic, it's not ready → WAIT
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
