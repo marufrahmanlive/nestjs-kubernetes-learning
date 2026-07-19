@@ -1,98 +1,323 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Task Manager API — Kubernetes Learning Project
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A simple Task Management REST API built with NestJS, designed to learn Kubernetes step-by-step on Docker Desktop's single-node cluster.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## API Endpoints
 
-## Description
+| Method | Path         | Description                              |
+| ------ | ------------ | ---------------------------------------- |
+| GET    | `/`          | Hello World                              |
+| GET    | `/health`    | Health check (status, timestamp, uptime) |
+| GET    | `/tasks`     | List all tasks                           |
+| POST   | `/tasks`     | Create a new task                        |
+| GET    | `/tasks/:id` | Get a single task                        |
+| PUT    | `/tasks/:id` | Update a task                            |
+| DELETE | `/tasks/:id` | Delete a task                            |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+### Sample Requests
 
 ```bash
-$ npm install
+# Create a task
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Learn Kubernetes", "description": "Master pods and deployments"}'
+
+# List all tasks
+curl http://localhost:3000/tasks
+
+# Health check
+curl http://localhost:3000/health
 ```
 
-## Compile and run the project
+## Prerequisites
+
+| Tool           | Minimum Version | Check Command                 |
+| -------------- | --------------- | ----------------------------- |
+| Node.js        | 22.x            | `node --version`              |
+| npm            | 10.x            | `npm --version`               |
+| Docker Desktop | 29.x            | `docker --version`            |
+| kubectl        | 1.29+           | `kubectl version --client`    |
+| GitHub Account | —               | (for GHCR container registry) |
+
+## Project Structure
+
+```
+nestjs-kubernetes-learning/
+├── src/
+│   ├── app.module.ts          # Root application module
+│   ├── app.controller.ts      # GET / and GET /health
+│   ├── app.service.ts         # Business logic for routes
+│   ├── main.ts                # Entry point (ValidationPipe, port)
+│   └── tasks/
+│       ├── tasks.module.ts    # Tasks feature module
+│       ├── tasks.controller.ts # CRUD endpoints
+│       ├── tasks.service.ts   # In-memory data store
+│       ├── task.interface.ts  # Task data shape
+│       └── dto/
+│           ├── create-task.dto.ts
+│           └── update-task.dto.ts
+├── kubernetes/                # All Kubernetes manifests
+│   ├── namespace.yaml         # Logical isolation (task-manager)
+│   ├── configmap.yaml         # Non-sensitive configuration
+│   ├── secret.yaml            # Sensitive data (passwords, tokens)
+│   ├── deployment.yaml        # Pods, ReplicaSets, probes, rolling updates
+│   ├── service.yaml           # ClusterIP + NodePort services
+│   ├── ingress.yaml           # External HTTP routing
+│   └── imagepullsecret.yaml   # GHCR authentication guide (template only)
+├── Dockerfile                 # Multi-stage production build
+├── .dockerignore              # Excludes from Docker build context
+├── .gitignore                 # Excludes from Git
+└── package.json
+```
+
+## Local Development (No Docker)
 
 ```bash
-# development
-$ npm run start
+# Install dependencies
+npm install
 
-# watch mode
-$ npm run start:dev
+# Start in development mode (hot-reload)
+npm run start:dev
 
-# production mode
-$ npm run start:prod
+# OR: Build and run production
+npm run build
+node dist/main
 ```
 
-## Run tests
+The app runs on [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Kubernetes Deployment Guide
+
+### Step 1: Build and Push the Docker Image to GHCR
+
+#### 1a. Login to GitHub Container Registry
 
 ```bash
-# unit tests
-$ npm run test
+# Create a GitHub Personal Access Token (PAT) first:
+# GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+# Required scopes: read:packages, write:packages, delete:packages
 
-# e2e tests
-$ npm run test:e2e
+export CR_PAT=YOUR_GITHUB_PAT         # Linux/macOS
+set CR_PAT=YOUR_GITHUB_PAT            # Windows CMD
+$env:CR_PAT = "YOUR_GITHUB_PAT"       # Windows PowerShell
 
-# test coverage
-$ npm run test:cov
+echo $CR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+#### 1b. Build and Push
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Build the Docker image (replace USERNAME with your GitHub username)
+docker build -t ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest .
+
+# Push to GHCR
+docker push ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+> **Note:** GHCR images are private by default. To make them public, go to your GitHub profile → Packages → task-manager → Package Settings → Change Visibility.
 
-## Resources
+### Step 2: Enable Kubernetes in Docker Desktop
 
-Check out a few resources that may come in handy when working with NestJS:
+1. Open Docker Desktop
+2. Go to Settings → Kubernetes
+3. Check **Enable Kubernetes**
+4. Click **Apply & Restart**
+5. Wait for the Kubernetes icon to turn green
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Verify:
 
-## Support
+```bash
+kubectl cluster-info
+kubectl get nodes
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+You should see one node named `docker-desktop` in `Ready` state.
 
-## Stay in touch
+### Step 3: Update the Image Reference
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+In `kubernetes/deployment.yaml`, update line ~128 with your GitHub username:
 
-## License
+```yaml
+image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Step 4: (Optional) Install Ingress Controller
+
+Docker Desktop doesn't include an Ingress Controller by default. Install nginx-ingress:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+```
+
+Wait for it to be ready:
+
+```bash
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+### Step 5: Create the Image Pull Secret
+
+```bash
+kubectl create secret docker-registry ghcr-secret \
+  --namespace=task-manager \
+  --docker-server=ghcr.io \
+  --docker-username=YOUR_GITHUB_USERNAME \
+  --docker-password=YOUR_GITHUB_PAT \
+  --docker-email=YOUR_GITHUB_EMAIL
+```
+
+> This secret allows Kubernetes to authenticate with GHCR and pull your private image. The Deployment references it via `imagePullSecrets`.
+
+### Step 6: Deploy Everything
+
+```bash
+# Apply all Kubernetes resources in order
+kubectl apply -f kubernetes/namespace.yaml
+kubectl apply -f kubernetes/configmap.yaml
+kubectl apply -f kubernetes/secret.yaml
+kubectl apply -f kubernetes/deployment.yaml
+kubectl apply -f kubernetes/service.yaml
+
+# Only if you installed the Ingress Controller (Step 4):
+kubectl apply -f kubernetes/ingress.yaml
+```
+
+### Step 7: Verify the Deployment
+
+```bash
+# Check all resources in our namespace
+kubectl get all -n task-manager
+
+# Check Pods status (should show 2/2 Ready)
+kubectl get pods -n task-manager
+
+# Check Pod logs
+kubectl logs -n task-manager -l app=task-manager
+
+# Describe a Pod for detailed info
+kubectl describe pod -n task-manager -l app=task-manager
+
+# Check Services
+kubectl get svc -n task-manager
+```
+
+### Step 8: Access the Application
+
+#### Option A: NodePort (Simplest)
+
+```bash
+# Find the assigned NodePort
+kubectl get svc task-manager-nodeport -n task-manager
+# Look for the port in the 30000-32767 range (e.g., 30300)
+
+# Access at:
+curl http://localhost:<NODE_PORT>/health
+```
+
+#### Option B: Port Forward (Quick Test)
+
+```bash
+# Forward local port 3000 to the ClusterIP service
+kubectl port-forward -n task-manager svc/task-manager-service 3000:3000
+
+# In another terminal:
+curl http://localhost:3000/health
+```
+
+#### Option C: Ingress (If Installed)
+
+```bash
+# Access via localhost (Ingress controller maps port 80)
+curl http://localhost/health
+curl http://localhost/tasks
+```
+
+---
+
+## Kubernetes Concepts Covered
+
+Each manifest file in `kubernetes/` contains extensive inline documentation. Topics covered:
+
+| #   | Topic                                      | File                              |
+| --- | ------------------------------------------ | --------------------------------- |
+| 1   | Docker Image (multi-stage build)           | `Dockerfile`                      |
+| 2   | GitHub Container Registry (GHCR)           | This README                       |
+| 3   | Private Registry Auth (`imagePullSecrets`) | `kubernetes/imagepullsecret.yaml` |
+| 4   | Namespace                                  | `kubernetes/namespace.yaml`       |
+| 5   | Pod                                        | `kubernetes/deployment.yaml`      |
+| 6   | Labels & Selectors                         | All manifests                     |
+| 7   | Deployment & ReplicaSet                    | `kubernetes/deployment.yaml`      |
+| 8   | Service (ClusterIP + NodePort)             | `kubernetes/service.yaml`         |
+| 9   | Load Balancing                             | `kubernetes/service.yaml`         |
+| 10  | Ingress                                    | `kubernetes/ingress.yaml`         |
+| 11  | ConfigMap                                  | `kubernetes/configmap.yaml`       |
+| 12  | Secret                                     | `kubernetes/secret.yaml`          |
+| 13  | Environment Variables                      | `kubernetes/deployment.yaml`      |
+| 14  | Liveness & Readiness Probes                | `kubernetes/deployment.yaml`      |
+| 15  | Rolling Updates                            | `kubernetes/deployment.yaml`      |
+| 16  | Resource Requests & Limits                 | `kubernetes/deployment.yaml`      |
+
+---
+
+## Common Troubleshooting
+
+### ImagePullBackOff Error
+
+**Cause:** Kubernetes cannot pull the image from GHCR.\
+**Fix:**
+
+1. Verify the image exists: `docker pull ghcr.io/YOUR_USERNAME/task-manager:latest`
+2. Check the secret exists: `kubectl get secret ghcr-secret -n task-manager`
+3. Recreate the secret with correct credentials (Step 5)
+4. Check if the GHCR package is private — it must be private for `imagePullSecrets` to work, or public to skip authentication.
+
+### CrashLoopBackOff Error
+
+**Cause:** The container starts but immediately crashes.\
+**Fix:**
+
+1. Check logs: `kubectl logs -n task-manager -l app=task-manager`
+2. Check if the port is already in use
+3. Verify environment variables: `kubectl describe pod -n task-manager`
+
+### Pending Pods
+
+**Cause:** Not enough resources on the node.\
+**Fix:**
+
+1. Check node resources: `kubectl describe node docker-desktop`
+2. Reduce resource requests in `deployment.yaml`
+
+### Connection Refused on NodePort
+
+**Cause:** Docker Desktop networking issue on Windows.\
+**Fix:** Use `kubectl port-forward` instead (Option B in Step 8).
+
+---
+
+## Cleanup
+
+```bash
+# Delete the entire namespace (removes all resources within it)
+kubectl delete namespace task-manager
+
+# Recreate from scratch anytime:
+kubectl apply -f kubernetes/namespace.yaml
+kubectl apply -f kubernetes/configmap.yaml
+kubectl apply -f kubernetes/secret.yaml
+# ... etc.
+```
+
+---
+
+## Future Additions (Coming Soon)
+
+- [ ] MongoDB (PersistentVolume, PersistentVolumeClaim, StatefulSet)
+- [ ] Redis (caching layer)
+- [ ] RabbitMQ (message queue for async task processing)
+- [ ] Horizontal Pod Autoscaler (HPA)
