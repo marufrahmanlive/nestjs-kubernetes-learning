@@ -1,0 +1,67 @@
+# DOCKER COMPOSE CONFIGURATION
+# ============================================================================
+#
+# This file defines how to build and run the Task Manager application
+# locally using Docker Compose. It uses the existing Dockerfile to build
+# the image and runs the container with the appropriate configuration.
+#
+# Key commands:
+#   docker compose build          - Build the image
+#   docker compose up -d          - Run the container in detached mode
+#   docker compose up --build     - Rebuild and run
+#   docker compose down           - Stop and remove the container
+#   docker compose push           - Push the built image to GHCR
+# ============================================================================
+
+services:
+  task-manager:
+    # BUILD: Uses the Dockerfile in the current directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Pass build args if needed (e.g., NODE_ENV)
+      args:
+        - NODE_ENV=production
+
+    # IMAGE: Full tag for GitHub Container Registry
+    image: ghcr.io/marufrahmanlive/task-manager:latest
+
+    # CONTAINER: Basic runtime configuration
+    container_name: task-manager-app
+    restart: unless-stopped
+
+    # PORTS: Map host port 3000 to container port 3000
+    ports:
+      - '3000:3000'
+
+    # ENVIRONMENT: Pass environment variables to the container
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+
+    # NETWORK: Isolated bridge network for this compose stack
+    networks:
+      - task-manager-net
+
+    # HEALTHCHECK: Ensures the container is actually running and responsive
+    # Uses Node.js built-in http module (wget is not available in Alpine)
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3000/', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); r.resume(); }).on('error', () => process.exit(1));",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  task-manager-net:
+    name: task-manager-net
+    driver: bridge

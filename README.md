@@ -106,15 +106,40 @@ $env:CR_PAT = "YOUR_GITHUB_PAT"       # Windows PowerShell
 echo $CR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 ```
 
-#### 1b. Build and Push
+#### 1b. Build and Push Using Docker Compose
+
+The project includes a `docker-compose.yml` that simplifies building and pushing the image. **Update the image tag** in `docker-compose.yml` with your GitHub username first:
+
+```yaml
+# In docker-compose.yml:
+image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+```
+
+Then use these commands:
 
 ```bash
-# Build the Docker image (replace USERNAME with your GitHub username)
-docker build -t ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest .
+# Build the image (no push)
+docker compose build
 
-# Push to GHCR
-docker push ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+# Build and start the container locally (verify it works)
+docker compose up -d
+
+# Test the running container
+curl http://localhost:3000/health
+
+# Stop and remove the container
+docker compose down
+
+# Push the built image directly to GHCR
+docker compose push
 ```
+
+> **Alternatively**, you can build and push in one step with raw Docker:
+>
+> ```bash
+> docker build -t ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest .
+> docker push ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+> ```
 
 > **Note:** GHCR images are private by default. To make them public, go to your GitHub profile → Packages → task-manager → Package Settings → Change Visibility.
 

@@ -129,7 +129,7 @@ spec:
           # IMAGE from GitHub Container Registry (private repo)
           # Format: ghcr.io/OWNER/REPO:tag
           # We'll push our image here in Topic 2.
-          image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
+          image: ghcr.io/marufrahmanlive/task-manager:latest
 
           # ---- IMAGE PULL POLICY ----
           # Controls when Kubernetes pulls the image.

@@ -9,7 +9,7 @@ WORKDIR /app
 # Copy package files first to leverage Docker layer caching.
 # This way, if only source code changes, npm install is skipped.
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts
 
 # Copy source and compile TypeScript → JavaScript into ./dist
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
@@ -17,7 +17,7 @@ COPY src ./src
 RUN npm run build
 
 # Prune devDependencies so only production deps remain
-RUN npm ci --ignore-scripts --omit=dev
+RUN npm prune --omit=dev
 
 # ============================
 # Stage 2: Runtime
