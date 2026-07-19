@@ -59,7 +59,7 @@ spec:
   # ---- REPLICAS ----
   # Number of identical Pod copies to maintain at all times.
   # Start with 2 for basic high availability. Scale up when needed.
-  replicas: 2
+  replicas: 3
 
   # ---- SELECTOR ----
   # Tells the Deployment which Pods it manages.

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import * as os from 'os';
 
 @Injectable()
 export class AppService {
@@ -11,6 +12,7 @@ export class AppService {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
+      hostname: os.hostname(),
     };
   }
 }
