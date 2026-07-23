@@ -13,6 +13,7 @@ export class AppService {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       hostname: os.hostname(),
+      version: 'v1.0.2',
     };
   }
 }

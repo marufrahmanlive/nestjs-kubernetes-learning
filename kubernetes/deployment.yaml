@@ -59,7 +59,7 @@ spec:
   # ---- REPLICAS ----
   # Number of identical Pod copies to maintain at all times.
   # Start with 2 for basic high availability. Scale up when needed.
-  replicas: 3
+  replicas: 2
 
   # ---- SELECTOR ----
   # Tells the Deployment which Pods it manages.
@@ -129,7 +129,7 @@ spec:
           # IMAGE from GitHub Container Registry (private repo)
           # Format: ghcr.io/OWNER/REPO:tag
           # We'll push our image here in Topic 2.
-          image: ghcr.io/marufrahmanlive/task-manager:latest
+          image: ghcr.io/marufrahmanlive/task-manager:v1.0.2
 
           # ---- IMAGE PULL POLICY ----
           # Controls when Kubernetes pulls the image.
