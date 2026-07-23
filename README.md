@@ -102,6 +102,8 @@ docker login ghcr.io -u marufrahmanlive
 
 ### 2. Build the Docker Image
 
+Replace `marufrahmanlive` with your GitHub username.
+
 ```bash
 # Option A: Build directly with Docker
 docker build -t ghcr.io/marufrahmanlive/task-manager:latest .
@@ -127,10 +129,7 @@ Docker Desktop doesn't include an Ingress Controller by default. Install nginx-i
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s
+kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
 ```
 
 ### 5. Create Namespace
@@ -141,15 +140,10 @@ kubectl apply -f kubernetes/namespace.yaml
 
 ### 6. Create Image Pull Secret for GHCR
 
-Replace `<github_username>`, `<CR_PAT>`, and `<email>` with your actual GitHub credentials:
+Create a secret allowing Kubernetes to pull your private Docker image from the GitHub Container Registry. Replace `<github_username>`, `<CR_PAT>`, and `<email>` with your actual GitHub credentials:
 
 ```bash
-kubectl create secret docker-registry ghcr-secret \
-  --namespace=task-manager \
-  --docker-server=ghcr.io \
-  --docker-username=<github_username> \
-  --docker-password=<CR_PAT> \
-  --docker-email=<email>
+kubectl create secret docker-registry ghcr-secret --namespace=task-manager --docker-server=ghcr.io --docker-username=<github_username> --docker-password=<CR_PAT> --docker-email=<email>
 ```
 
 Verify the secret was created:
@@ -158,14 +152,25 @@ Verify the secret was created:
 kubectl get secrets --namespace task-manager
 ```
 
-### 7. Deploy All Resources
+### 7. Deploy to Kubernetes
+
+#### First-Time Deployment
+
+For the initial rollout of all resources:
 
 ```bash
-# Apply all Kubernetes manifests in the kubernetes/ directory
 kubectl apply -f kubernetes/
-
-# Check that the pods are running
 kubectl get pods --namespace task-manager
+```
+
+#### Subsequent Deployments (New Image Version)
+
+After the first deployment, use `kubectl set image` to update the deployment to a new image version without reapplying all manifests:
+
+```bash
+kubectl set image deployment/task-manager-deployment task-manager=ghcr.io/marufrahmanlive/task-manager:v1.0.3 --namespace task-manager
+
+kubectl rollout status deployment/task-manager-deployment --namespace task-manager --timeout=120s
 ```
 
 ### 8. Delete All Resources
