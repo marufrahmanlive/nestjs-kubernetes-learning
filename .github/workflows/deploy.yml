@@ -1,0 +1,244 @@
+# ============================================================================
+# SELF-HOSTED GITHUB ACTIONS WORKFLOW
+# ============================================================================
+#
+# This workflow automates building, pushing, and deploying the NestJS
+# application to a local Docker Desktop Kubernetes cluster.
+#
+# FLOW:
+#   Push to main → Tests → Auto-tag (bump semver) → Build & Push (docker compose) → Deploy to K8s
+#
+# PREREQUISITES:
+#   1. GitHub Actions secret named GH_PAT (Personal Access Token with
+#      repo, write:packages, read:packages, delete:packages scopes).
+#      This single secret is used for:
+#        - Pushing auto-created version tags (needs repo scope)
+#        - Authenticating to GHCR (needs write:packages scope)
+#        - Creating the Kubernetes image pull secret
+#   2. A self-hosted GitHub runner configured on your local PC with:
+#      - Docker Desktop with Kubernetes enabled and running
+#      - kubectl context set to docker-desktop
+#      - nginx-ingress controller installed (see README step 4)
+# ============================================================================
+
+name: Build, Push & Deploy to Local Kubernetes
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GITHUB_USERNAME: marufrahmanlive
+  IMAGE_NAME: task-manager
+  NAMESPACE: task-manager
+  KUBE_DIR: kubernetes
+
+# ============================================================================
+# JOB 1 · test
+# Runs unit tests before anything else. If tests fail, the pipeline stops.
+# ============================================================================
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: npm run test
+
+  # ============================================================================
+  # JOB 2 · auto-tag
+  # Runs only on branch pushes (not tag pushes — prevents infinite loop).
+  # Reads the last semver tag, bumps the patch component, and pushes a new tag.
+  # The new tag push triggers the build-and-push job via on.push.tags.
+  # ============================================================================
+  auto-tag:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Calculate Next Semantic Version
+        id: semver
+        run: |
+          git fetch --tags
+
+          # Get the most recent semver tag, default to v0.0.0 if none exists
+          LAST_TAG=$(git describe --tags --abbrev=0 --match "v*.*.*" 2>/dev/null || echo "v0.0.0")
+          echo "Last tag found: ${LAST_TAG}"
+
+          VERSION="${LAST_TAG#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          NEW_PATCH=$((PATCH + 1))
+          NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "New tag to create: ${NEW_TAG}"
+
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and Push New Tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${{ steps.semver.outputs.new_tag }}" \
+            -m "Auto-release ${{ steps.semver.outputs.new_tag }} from commit ${{ github.sha }}"
+
+          git push origin "${{ steps.semver.outputs.new_tag }}"
+
+  # ============================================================================
+  # JOB 3 · build-and-push
+  # Triggered exclusively by tag pushes (v*.*.*).
+  # Builds the Docker image using docker compose and pushes both a versioned
+  # tag and :latest to GHCR.
+  # ============================================================================
+  build-and-push:
+    needs: auto-tag
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GH_PAT }}" | docker login ghcr.io \
+            -u "${{ env.GITHUB_USERNAME }}" \
+            --password-stdin
+
+      - name: Determine Image Tags
+        id: tags
+        run: |
+          IMAGE_BASE="ghcr.io/${{ env.GITHUB_USERNAME }}/${{ env.IMAGE_NAME }}"
+
+          # github.ref_name = tag name (e.g., "v1.0.3")
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+
+          echo "Building image version: ${VERSION}"
+          echo "version_tag=${IMAGE_BASE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${IMAGE_BASE}:latest"       >> "$GITHUB_OUTPUT"
+
+      - name: Build Image Using Docker Compose
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.version_tag }}
+        run: |
+          docker compose build --no-cache
+
+      - name: Push Versioned Image Tag to GHCR
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.version_tag }}
+        run: |
+          docker compose push
+
+      - name: Re-tag and Push :latest
+        run: |
+          docker tag \
+            "${{ steps.tags.outputs.version_tag }}" \
+            "${{ steps.tags.outputs.latest_tag }}"
+          docker push "${{ steps.tags.outputs.latest_tag }}"
+
+  # ============================================================================
+  # JOB 4 · deploy-to-k8s
+  # Runs on the self-hosted runner (your local PC).
+  # Deploys the newly pushed image to the Docker Desktop Kubernetes cluster.
+  # ============================================================================
+  deploy-to-k8s:
+    needs: build-and-push
+    runs-on: self-hosted
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Version Tag
+        id: version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Deploying version: ${VERSION}"
+        shell: bash
+
+      - name: Verify Kubernetes Connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Apply Namespace
+        run: |
+          kubectl apply -f ${{ env.KUBE_DIR }}/namespace.yaml
+
+      - name: Create/Update Image Pull Secret
+        run: |
+          kubectl delete secret ghcr-secret \
+            --namespace ${{ env.NAMESPACE }} \
+            --ignore-not-found
+
+          kubectl create secret docker-registry ghcr-secret \
+            --namespace ${{ env.NAMESPACE }} \
+            --docker-server=ghcr.io \
+            --docker-username=${{ env.GITHUB_USERNAME }} \
+            --docker-password=${{ secrets.GH_PAT }} \
+            --docker-email=${{ env.GITHUB_USERNAME }}@users.noreply.github.com
+
+      - name: Deploy All Kubernetes Manifests
+        run: |
+          kubectl apply -f ${{ env.KUBE_DIR }}/
+
+      - name: Update Deployment Image to Versioned Tag
+        run: |
+          kubectl set image deployment/task-manager-deployment \
+            task-manager=ghcr.io/${{ env.GITHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
+            --namespace ${{ env.NAMESPACE }}
+
+      - name: Wait for Rollout
+        run: |
+          kubectl rollout status deployment/task-manager-deployment \
+            --namespace ${{ env.NAMESPACE }} \
+            --timeout=120s
+
+      - name: Verify Deployment
+        run: |
+          echo "=== Pods ==="
+          kubectl get pods --namespace ${{ env.NAMESPACE }}
+          echo ""
+          echo "=== Services ==="
+          kubectl get svc --namespace ${{ env.NAMESPACE }}
+          echo ""
+          echo "=== Ingress ==="
+          kubectl get ingress --namespace ${{ env.NAMESPACE }} 2>/dev/null || echo "No ingress resources found"
+          echo ""
+          echo "=== Recent Events ==="
+          kubectl get events --namespace ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | tail -10

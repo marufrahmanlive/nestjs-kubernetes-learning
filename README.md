@@ -178,6 +178,75 @@ kubectl delete namespace task-manager
 
 ---
 
+## Automated Deployment with GitHub Actions
+
+This repository includes a **self-hosted** GitHub Actions workflow at `.github/workflows/deploy.yml` that automates the full CI/CD pipeline on your local PC.
+
+### Pipeline Overview
+
+```
+Push to main → Tests → Auto-tag (bump semver) → Build & Push (docker compose) → Deploy to K8s
+```
+
+The workflow consists of **4 jobs**:
+
+| Job                | Runner        | Trigger     | Description                                                                                        |
+| ------------------ | ------------- | ----------- | -------------------------------------------------------------------------------------------------- |
+| **test**           | ubuntu-latest | Branch push | Runs `npm run test` to validate code                                                               |
+| **auto-tag**       | ubuntu-latest | Branch push | Reads the last semver tag, bumps the patch, pushes e.g. `v1.0.3`                                   |
+| **build-and-push** | ubuntu-latest | Tag push    | Builds image via `docker compose build --no-cache`, pushes versioned tag + `:latest` to GHCR       |
+| **deploy-to-k8s**  | self-hosted   | Tag push    | Applies all Kubernetes manifests, updates deployment to the new versioned image, waits for rollout |
+
+### Setting Up the Self-Hosted Runner
+
+1. In your GitHub repository, go to **Settings → Actions → Runners → New self-hosted runner**
+2. Follow the instructions to download and configure the runner on your local PC
+3. Ensure Docker Desktop with Kubernetes is running before starting the runner
+4. Set `kubectl` context to `docker-desktop`:
+   ```bash
+   kubectl config use-context docker-desktop
+   ```
+
+### Required GitHub Secret
+
+The workflow uses a **single secret** named `GH_PAT` for all authentication needs.
+
+1. Create a GitHub Personal Access Token (classic) with scopes:
+   - `repo` (for pushing auto-created version tags)
+   - `write:packages` (for pushing Docker images to GHCR)
+   - `read:packages` (for reading GHCR packages)
+   - `delete:packages` (for managing GHCR packages)
+2. Go to **Settings → Secrets and variables → Actions → New repository secret**
+3. Name: `GH_PAT`, Value: your personal access token
+
+### Triggers
+
+- **Push to `main` or `master` branch** — triggers tests → auto-tag → build-and-push → deploy
+- **Tag push (`v*.*.*`)** — triggers build-and-push → deploy directly (for manual releases)
+- **Manual tag push** — `git tag -a v1.0.0 -m "release" && git push origin v1.0.0`
+
+### How Auto-Tagging Works
+
+Every push to `main` automatically:
+
+1. Finds the most recent semver tag (e.g., `v1.0.2`)
+2. Bumps the patch version (e.g., `v1.0.3`)
+3. Creates and pushes the new tag to the repository
+4. The tag push triggers the build-and-push + deploy jobs
+
+### Docker Compose Integration
+
+The `docker-compose.yml` uses the `IMAGE_TAG` environment variable for dynamic tagging:
+
+```yaml
+image: ${IMAGE_TAG:-ghcr.io/marufrahmanlive/task-manager:latest}
+```
+
+- In CI/CD, `IMAGE_TAG` is set to the versioned image (e.g., `ghcr.io/marufrahmanlive/task-manager:1.0.3`)
+- Locally, it falls back to `ghcr.io/marufrahmanlive/task-manager:latest`
+
+---
+
 ## Kubernetes Concepts Covered
 
 Each manifest file in `kubernetes/` contains extensive inline documentation. Topics covered:

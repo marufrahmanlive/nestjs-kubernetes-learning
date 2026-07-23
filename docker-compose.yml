@@ -24,7 +24,9 @@ services:
         - NODE_ENV=production
 
     # IMAGE: Full tag for GitHub Container Registry
-    image: ghcr.io/marufrahmanlive/task-manager:v1.0.2
+    # Uses the IMAGE_TAG environment variable if set (for CI/CD pipelines).
+    # Falls back to a default tag when running locally.
+    image: ${IMAGE_TAG:-ghcr.io/marufrahmanlive/task-manager:latest}
 
     # CONTAINER: Basic runtime configuration
     container_name: task-manager-app
