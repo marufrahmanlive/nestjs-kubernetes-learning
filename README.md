@@ -90,176 +90,90 @@ The app runs on [http://localhost:3000](http://localhost:3000).
 
 ## Kubernetes Deployment Guide
 
-### Step 1: Build and Push the Docker Image to GHCR
+This guide walks through deploying the NestJS application on Kubernetes using Docker Desktop.
 
-#### 1a. Login to GitHub Container Registry
-
-```bash
-# Create a GitHub Personal Access Token (PAT) first:
-# GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-# Required scopes: read:packages, write:packages, delete:packages
-
-export CR_PAT=YOUR_GITHUB_PAT         # Linux/macOS
-set CR_PAT=YOUR_GITHUB_PAT            # Windows CMD
-$env:CR_PAT = "YOUR_GITHUB_PAT"       # Windows PowerShell
-
-echo $CR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-```
-
-#### 1b. Build and Push Using Docker Compose
-
-The project includes a `docker-compose.yml` that simplifies building and pushing the image. **Update the image tag** in `docker-compose.yml` with your GitHub username first:
-
-```yaml
-# In docker-compose.yml:
-image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
-```
-
-Then use these commands:
+### 1. Login to GitHub Container Registry
 
 ```bash
-# Build the image (no push)
-docker compose build
+docker login ghcr.io -u marufrahmanlive
+```
 
-# Build and start the container locally (verify it works)
-docker compose up -d
+> You'll be prompted for your GitHub Personal Access Token (PAT) with `read:packages`, `write:packages`, and `delete:packages` scopes.
 
-# Test the running container
-curl http://localhost:3000/health
+### 2. Build the Docker Image
 
-# Stop and remove the container
-docker compose down
+```bash
+# Option A: Build directly with Docker
+docker build -t ghcr.io/marufrahmanlive/task-manager:latest .
 
-# Push the built image directly to GHCR
+# Option B: Build using Docker Compose
+docker compose build --no-cache
+```
+
+### 3. Push to GHCR
+
+```bash
+# Option A: Push directly with Docker
+docker push ghcr.io/marufrahmanlive/task-manager:latest
+
+# Option B: Push using Docker Compose
 docker compose push
 ```
 
-> **Alternatively**, you can build and push in one step with raw Docker:
->
-> ```bash
-> docker build -t ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest .
-> docker push ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
-> ```
-
-> **Note:** GHCR images are private by default. To make them public, go to your GitHub profile → Packages → task-manager → Package Settings → Change Visibility.
-
-### Step 2: Enable Kubernetes in Docker Desktop
-
-1. Open Docker Desktop
-2. Go to Settings → Kubernetes
-3. Check **Enable Kubernetes**
-4. Click **Apply & Restart**
-5. Wait for the Kubernetes icon to turn green
-
-Verify:
-
-```bash
-kubectl cluster-info
-kubectl get nodes
-```
-
-You should see one node named `docker-desktop` in `Ready` state.
-
-### Step 3: Update the Image Reference
-
-In `kubernetes/deployment.yaml`, update line ~128 with your GitHub username:
-
-```yaml
-image: ghcr.io/YOUR_GITHUB_USERNAME/task-manager:latest
-```
-
-### Step 4: (Optional) Install Ingress Controller
+### 4. Install Ingress Controller
 
 Docker Desktop doesn't include an Ingress Controller by default. Install nginx-ingress:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-```
 
-Wait for it to be ready:
-
-```bash
 kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=120s
 ```
 
-### Step 5: Create the Image Pull Secret
+### 5. Create Namespace
+
+```bash
+kubectl apply -f kubernetes/namespace.yaml
+```
+
+### 6. Create Image Pull Secret for GHCR
+
+Replace `<github_username>`, `<CR_PAT>`, and `<email>` with your actual GitHub credentials:
 
 ```bash
 kubectl create secret docker-registry ghcr-secret \
   --namespace=task-manager \
   --docker-server=ghcr.io \
-  --docker-username=YOUR_GITHUB_USERNAME \
-  --docker-password=YOUR_GITHUB_PAT \
-  --docker-email=YOUR_GITHUB_EMAIL
+  --docker-username=<github_username> \
+  --docker-password=<CR_PAT> \
+  --docker-email=<email>
 ```
 
-> This secret allows Kubernetes to authenticate with GHCR and pull your private image. The Deployment references it via `imagePullSecrets`.
-
-### Step 6: Deploy Everything
+Verify the secret was created:
 
 ```bash
-# Apply all Kubernetes resources in order
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/secret.yaml
-kubectl apply -f kubernetes/deployment.yaml
-kubectl apply -f kubernetes/service.yaml
-
-# Only if you installed the Ingress Controller (Step 4):
-kubectl apply -f kubernetes/ingress.yaml
+kubectl get secrets --namespace task-manager
 ```
 
-### Step 7: Verify the Deployment
+### 7. Deploy All Resources
 
 ```bash
-# Check all resources in our namespace
-kubectl get all -n task-manager
+# Apply all Kubernetes manifests in the kubernetes/ directory
+kubectl apply -f kubernetes/
 
-# Check Pods status (should show 2/2 Ready)
-kubectl get pods -n task-manager
-
-# Check Pod logs
-kubectl logs -n task-manager -l app=task-manager
-
-# Describe a Pod for detailed info
-kubectl describe pod -n task-manager -l app=task-manager
-
-# Check Services
-kubectl get svc -n task-manager
+# Check that the pods are running
+kubectl get pods --namespace task-manager
 ```
 
-### Step 8: Access the Application
+### 8. Delete All Resources
 
-#### Option A: NodePort (Simplest)
-
-```bash
-# Find the assigned NodePort
-kubectl get svc task-manager-nodeport -n task-manager
-# Look for the port in the 30000-32767 range (e.g., 30300)
-
-# Access at:
-curl http://localhost:<NODE_PORT>/health
-```
-
-#### Option B: Port Forward (Quick Test)
+To tear down everything under the namespace:
 
 ```bash
-# Forward local port 3000 to the ClusterIP service
-kubectl port-forward -n task-manager svc/task-manager-service 3000:3000
-
-# In another terminal:
-curl http://localhost:3000/health
-```
-
-#### Option C: Ingress (If Installed)
-
-```bash
-# Access via localhost (Ingress controller maps port 80)
-curl http://localhost/health
-curl http://localhost/tasks
+kubectl delete namespace task-manager
 ```
 
 ---
@@ -289,6 +203,26 @@ Each manifest file in `kubernetes/` contains extensive inline documentation. Top
 
 ---
 
+## Accessing the Application
+
+After deployment, the application is available through the Ingress controller at:
+
+```bash
+curl http://localhost/health
+curl http://localhost/tasks
+```
+
+For quick testing without Ingress, use port-forwarding:
+
+```bash
+kubectl port-forward -n task-manager svc/task-manager-service 3000:3000
+
+# In another terminal:
+curl http://localhost:3000/health
+```
+
+---
+
 ## Common Troubleshooting
 
 ### ImagePullBackOff Error
@@ -296,10 +230,10 @@ Each manifest file in `kubernetes/` contains extensive inline documentation. Top
 **Cause:** Kubernetes cannot pull the image from GHCR.\
 **Fix:**
 
-1. Verify the image exists: `docker pull ghcr.io/YOUR_USERNAME/task-manager:latest`
+1. Verify the image exists: `docker pull ghcr.io/marufrahmanlive/task-manager:latest`
 2. Check the secret exists: `kubectl get secret ghcr-secret -n task-manager`
-3. Recreate the secret with correct credentials (Step 5)
-4. Check if the GHCR package is private — it must be private for `imagePullSecrets` to work, or public to skip authentication.
+3. Recreate the secret with correct credentials (Step 6)
+4. Ensure the GHCR package is private for `imagePullSecrets` to work, or public to skip authentication
 
 ### CrashLoopBackOff Error
 
@@ -317,26 +251,6 @@ Each manifest file in `kubernetes/` contains extensive inline documentation. Top
 
 1. Check node resources: `kubectl describe node docker-desktop`
 2. Reduce resource requests in `deployment.yaml`
-
-### Connection Refused on NodePort
-
-**Cause:** Docker Desktop networking issue on Windows.\
-**Fix:** Use `kubectl port-forward` instead (Option B in Step 8).
-
----
-
-## Cleanup
-
-```bash
-# Delete the entire namespace (removes all resources within it)
-kubectl delete namespace task-manager
-
-# Recreate from scratch anytime:
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/secret.yaml
-# ... etc.
-```
 
 ---
 
